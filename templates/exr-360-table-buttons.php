@@ -79,7 +79,7 @@ function exr_display_exchange_rate_table()
                 esc_url($flag_url) .
                 '" alt="' .
                 esc_attr($rate->currency_code) .
-                ' Flag" style="width: 25px; height: 25px;">
+                ' Flag">
                                         </div>
                                         <p class="exr-currency-code">' .
                 esc_html($rate->currency_code) .

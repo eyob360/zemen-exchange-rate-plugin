@@ -247,7 +247,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                                 <div class="exr-currency-flag-code-name-container">
                                     <div class="exr-currency-flag-code">
                                         <div class="exr-currency-flag">
-                                            ${rate.flag_url ? `<img src="${rate.flag_url}" alt="${rate.currency_code} Flag" style="width: 25px; height: 25px;">` : ''}
+                                            ${rate.flag_url ? `<img src="${rate.flag_url}" alt="${rate.currency_code} Flag">` : ''}
                                         </div>
                                         <p class="exr-currency-code-2">${rate.currency_code}</p>
                                     </div>
