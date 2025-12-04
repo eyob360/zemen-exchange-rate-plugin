@@ -260,6 +260,10 @@ function exr_360_manage_page() {
                         <td><input type="text" name="currency_code" required /></td>
                     </tr>
                     <tr>
+                        <th scope="row"><label for="post_date">Date</label></th>
+                        <td><input type="date" name="post_date" required /></td>
+                    </tr>
+                    <tr>
                         <th scope="row"><label for="buying_rate">Buying Rate</label></th>
                         <td><input type="number" step="0.0001" name="buying_rate" required /></td>
                     </tr>
@@ -413,6 +417,7 @@ function exr_360_manage_page() {
         $('#addNewExchangeRateBtn').on('click', function() {
             $('#exchangeRateForm')[0].reset();
             $('#modalTitle').text('Add New Exchange Rate');
+            $('#exchangeRateForm input[name="post_date"]').val(new Date().toISOString().slice(0, 10));
             $('#exchangeRateModal').show();
         });
 
@@ -441,6 +446,7 @@ function exr_360_manage_page() {
                     var data = JSON.parse(response);
                     $('#exchangeRateForm input[name="exchange_id"]').val(data.exchange_id);
                     $('#exchangeRateForm input[name="currency_code"]').val(data.currency_code);
+                    $('#exchangeRateForm input[name="post_date"]').val((data.post_date || '').split(' ')[0]);
                     $('#exchangeRateForm input[name="buying_rate"]').val(data.buying_rate);
                     $('#exchangeRateForm input[name="selling_rate"]').val(data.selling_rate);
                     $('#exchangeRateForm input[name="avg_buying_rate"]').val(data.avg_buying_rate || '');
@@ -556,14 +562,19 @@ function save_exchange_rate() {
     parse_str($_POST['formData'], $formData);
     $exchange_id = intval($formData['exchange_id']);
     $currency_code = sanitize_text_field($formData['currency_code']);
+    $post_date = sanitize_text_field($formData['post_date']);
     $buying_rate = floatval($formData['buying_rate']);
     $selling_rate = floatval($formData['selling_rate']);
     $avg_buying_rate = isset($formData['avg_buying_rate']) && $formData['avg_buying_rate'] !== '' ? floatval($formData['avg_buying_rate']) : null;
     $avg_selling_rate = isset($formData['avg_selling_rate']) && $formData['avg_selling_rate'] !== '' ? floatval($formData['avg_selling_rate']) : null;
+    // Guard against invalid/empty dates; fallback to current time in site TZ
+    $parsed_post_date = $post_date ? strtotime($post_date) : false;
+    $post_datetime = $parsed_post_date ? date('Y-m-d H:i:s', $parsed_post_date) : current_time('mysql');
     
     if ($exchange_id) {
         $update_data = [
             'currency_code' => $currency_code,
+            'post_date' => $post_datetime,
             'buying_rate' => $buying_rate,
             'selling_rate' => $selling_rate
         ];
@@ -581,6 +592,7 @@ function save_exchange_rate() {
     } else {
         $insert_data = [
             'currency_code' => $currency_code,
+            'post_date' => $post_datetime,
             'buying_rate' => $buying_rate,
             'selling_rate' => $selling_rate
         ];
@@ -778,29 +790,49 @@ function get_exchange_rate() {
    add_action("wp_ajax_get_exchange_rates", "get_exchange_rates");
    add_action("wp_ajax_nopriv_get_exchange_rates", "get_exchange_rates");
    
-   function get_exchange_rates()
-   {
-       global $wpdb;
-   
-       $date = sanitize_text_field($_POST["date"]);
-       $table_name = $wpdb->prefix . "exr360_daily_info";
-   
-       $rates = $wpdb->get_results(
-           $wpdb->prepare(
-               "SELECT * FROM $table_name WHERE DATE(post_date) = %s",
-               $date
-           )
-       );
-   
-       if ($rates) {
-           echo json_encode([
-               "status" => "success",
-               "rates" => $rates,
-           ]);
-       } else {
-           echo json_encode([
-               "status" => "error",
-               "message" => "No exchange rates available for the selected date.",
+function get_exchange_rates()
+{
+    global $wpdb;
+
+    $date = sanitize_text_field($_POST["date"]);
+    $table_name = $wpdb->prefix . "exr360_daily_info";
+
+    // Fallback to today if date is empty or invalid
+    if (empty($date) || !strtotime($date)) {
+        $date = current_time('Y-m-d');
+    }
+
+    // Today's rates (live)
+    $rates = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT * FROM $table_name WHERE DATE(post_date) = %s",
+            $date
+        )
+    );
+
+    // Yesterday's averages
+    $avg_date = date('Y-m-d', strtotime("$date -1 day"));
+    $avg_rates = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT * FROM $table_name WHERE DATE(post_date) = %s AND (avg_buying_rate IS NOT NULL OR avg_selling_rate IS NOT NULL)",
+            $avg_date
+        )
+    );
+
+    if ($rates || $avg_rates) {
+        echo json_encode([
+            "status" => "success",
+            "date" => $date,
+            "avg_date" => $avg_date,
+            "rates" => [
+                "day" => $rates ?: [],
+                "average" => $avg_rates ?: [],
+            ],
+        ]);
+    } else {
+        echo json_encode([
+            "status" => "error",
+            "message" => "No exchange rates available for the selected date.",
            ]);
        }
    
@@ -1006,6 +1038,11 @@ function exr_360_fetch_exchange_rates() {
         $avg_update_count = 0;
         $avg_error_count = 0;
 
+        // Average XML is reported for the previous day, so shift the target date back one day
+        $avg_day_timestamp = strtotime('-1 day', current_time('timestamp'));
+        $avg_day = date('Y-m-d', $avg_day_timestamp);
+        $avg_day_time = date('Y-m-d H:i:s', $avg_day_timestamp);
+
         // Fetch average rates XML data from URL
         $avg_response = wp_remote_get($avg_xml_url, [
             'timeout' => 30,
@@ -1046,7 +1083,7 @@ function exr_360_fetch_exchange_rates() {
                                 $wpdb->prepare(
                                     "SELECT exchange_id, avg_buying_rate, avg_selling_rate FROM $table_name WHERE currency_code = %s AND DATE(post_date) = %s",
                                     $avg_currency_code,
-                                    $current_day
+                                    $avg_day
                                 )
                             );
 
@@ -1079,7 +1116,7 @@ function exr_360_fetch_exchange_rates() {
                                         'selling_rate'  => 0,
                                         'avg_buying_rate'  => $avg_buying_rate,
                                         'avg_selling_rate' => $avg_selling_rate,
-                                        'post_date'     => $current_time
+                                        'post_date'     => $avg_day_time
                                     ]
                                 );
 

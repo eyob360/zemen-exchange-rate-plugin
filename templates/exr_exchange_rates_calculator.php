@@ -163,6 +163,46 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
     .ex-radio-container input[type="radio"]:checked+.radio-mark {
         background-color: #ED1D24;
     }
+
+    .exr-section-heading {
+        font-weight: 600;
+        font-size: 18px;
+        color: #000;
+        padding: 8px 12px;
+    }
+
+    .exr-tab-controls {
+        display: flex;
+        gap: 10px;
+        padding: 0px 12px !important;
+    }
+
+    .exr-tab-btn {
+        padding: 8px 12px !important;
+        color: #ED1D24 !important;
+        border: 1px solid #faebeb !important;
+        background: #fff !important;
+        border-radius: 4px !important;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px !important;
+    }
+
+    .exr-tab-btn:hover {
+        background: #faebeb !important;
+        border-color: #faebeb !important;
+        color: #ED1D24 !important;
+    }
+
+    .exr-tab-btn.active {
+        background: #ED1D24 !important;
+        color: #fff !important;
+        border-color: #ED1D24 !important;
+    }
+
+    .exr-tab-panel {
+        display: none;
+    }
 </style>
 <script>
    jQuery(document).ready(function($) {
@@ -217,8 +257,12 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
             try {
                 const result = JSON.parse(response);
 
+                // Normalize dates from the response
+                const selectedDate = result.date || date;
+                const avgDate = result.avg_date || '';
+
                 // Update the header with the selected date
-                const selectedDateFormatted = new Date(date).toLocaleDateString('en-US', {
+                const selectedDateFormatted = new Date(selectedDate).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric'
@@ -226,22 +270,24 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                 $('#selected-date').text(selectedDateFormatted);
 
                 if (result.status === 'success') {
-                    const enrichedRates = enrichRates(result.rates);
-                    exchangeRates = enrichedRates; // Cache the rates
+                    const dayRatesRaw = (result.rates && Array.isArray(result.rates.day)) ? result.rates.day : (Array.isArray(result.rates) ? result.rates : []);
+                    const avgRatesRaw = (result.rates && Array.isArray(result.rates.average)) ? result.rates.average : [];
 
-                    // Header
-                    const header = `
+                    const enrichedDayRates = enrichRates(dayRatesRaw);
+                    const enrichedAvgRates = enrichRates(avgRatesRaw);
+
+                    exchangeRates = enrichedDayRates; // Cache the live rates for calculations
+
+                    const todayHeader = `
+                        <div class="exr-section-heading">Today's Rates (${selectedDateFormatted})</div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
                             <div class="exr-column">Buying</div>
                             <div class="exr-column">Selling</div>
-                            <div class="exr-column">Avg Buying</div>
-                            <div class="exr-column">Avg Selling</div>
                         </div>
                     `;
 
-                    // Update rates list
-                    const rows = enrichedRates.map(rate => `
+                    const todayRows = enrichedDayRates.map(rate => `
                         <div class="exr-row">
                             <div class="exr-column">
                                 <div class="exr-currency-flag-code-name-container">
@@ -263,21 +309,71 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                             <div class="exr-column" style="color:#000;font-size:20px;">
                                 ${formatNumber(Number(rate.selling_rate))}
                             </div>
-                            <div class="exr-column" style="color:#000;font-size:20px;">
+                        </div>
+                    `).join('') || '<p style="color: gray; text-align: center;">No live rates for this date.</p>';
+
+                    const avgDateFormatted = avgDate ? new Date(avgDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Previous Day';
+                    const avgHeader = `
+                        <div class="exr-section-heading">Yesterday's Average Rates (${avgDateFormatted})</div>
+                        <div class="exr-head-container">
+                            <div class="exr-column">Currency</div>
+                            <div class="exr-column">Avg Buying</div>
+                            <div class="exr-column">Avg Selling</div>
+                        </div>
+                    `;
+
+                    const avgRows = enrichedAvgRates.map(rate => `
+                        <div class="exr-row">
+                            <div class="exr-column">
+                                <div class="exr-currency-flag-code-name-container">
+                                    <div class="exr-currency-flag-code">
+                                        <div class="exr-currency-flag">
+                                            ${rate.flag_url ? `<img src="${rate.flag_url}" alt="${rate.currency_code} Flag">` : ''}
+                                        </div>
+                                        <p class="exr-currency-code-2">${rate.currency_code}</p>
+                                    </div>
+                                    <div class="exr-currency-icon-name-container">
+                                        <span class="exr-currency-icon" >${rate.symbol}</span>
+                                        <span class="exr-currency-name" >${rate.name}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="exr-column" style="color:#000; font-size:20px;">
                                 ${rate.avg_buying_rate ? formatNumber(Number(rate.avg_buying_rate)) : '--'}
                             </div>
                             <div class="exr-column" style="color:#000;font-size:20px;">
                                 ${rate.avg_selling_rate ? formatNumber(Number(rate.avg_selling_rate)) : '--'}
                             </div>
                         </div>
-                    `).join('');
+                    `).join('') || '<p style="color: gray; text-align: center; font-size: 16px; padding-top: 12px;">No average rates available for yesterday.</p>';
 
-                    $('#exr-rates-wrapper').html(header + rows);
+                    $('#exr-rates-wrapper').html(`
+                        <div class="exr-rates-shell">
+                            <div class="exr-tab-controls">
+                                <button type="button" class="exr-tab-btn active" data-target="today">Today's Rates</button>
+                                <button type="button" class="exr-tab-btn" data-target="avg">Yesterday's Averages</button>
+                            </div>
+                            <div class="exr-tab-panels">
+                                <div class="exr-tab-panel" data-panel="today" style="display:block;">
+                                    <div class="exr-card-container">
+                                        ${todayHeader}
+                                        ${todayRows}
+                                    </div>
+                                </div>
+                                <div class="exr-tab-panel" data-panel="avg">
+                                    <div class="exr-card-container">
+                                        ${avgHeader}
+                                        ${avgRows}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
 
-                    // Update the "Select Currency" dropdown
-                    const dropdownOptions = enrichedRates.map(rate => `
+                    // Update the "Select Currency" dropdown using today's rates
+                    const dropdownOptions = enrichedDayRates.map(rate => `
                         <option value="${rate.currency_code}">${rate.currency_code} (${rate.symbol})</option>
-                    `).join('');
+                    `).join('') || '<option value="">No currencies available</option>';
                     $('#currency').html(dropdownOptions);
 
                     // Trigger a calculation update (if needed)
@@ -295,6 +391,18 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
             }
         });
     }
+
+    // Handle tab switching inside rates wrapper
+    $('#exr-rates-wrapper').on('click', '.exr-tab-btn', function() {
+        const target = $(this).data('target');
+        const shell = $(this).closest('.exr-rates-shell');
+
+        shell.find('.exr-tab-btn').removeClass('active');
+        $(this).addClass('active');
+
+        shell.find('.exr-tab-panel').hide();
+        shell.find(`.exr-tab-panel[data-panel="${target}"]`).show();
+    });
 
     // Fetch and display specific exchange rate calculation
     function calculateExchangeRate() {

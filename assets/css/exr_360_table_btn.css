@@ -51,7 +51,7 @@
 
 /* table */
 .exr-table-container {
-  max-width: 672px;
+  max-width: 544px;
   width: 100%;
   max-height: calc(100vh - 140px);
   overflow: hidden;
@@ -63,7 +63,7 @@
   bottom: 85px;
   left: 30px;
   position: fixed;
-  --exr-date-height: 92px;
+  --exr-date-height: 48px;
   --exr-head-height: 56px;
   -webkit-overflow-scrolling: touch;
 }
@@ -166,14 +166,14 @@
 
 .exr-date-container {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   gap: 6px;
-  padding: 16px 12px 0px;
-  height: var(--exr-date-height);
+  padding: 16px 0px 8px;
+  height: auto;
   box-sizing: border-box;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 15px;
   border-bottom: 1px solid var(--primary-color);
   white-space: normal;
   word-break: break-word;
@@ -193,7 +193,9 @@
   color: #000;
   } */
 
-.exr-show-currency-convertor a {
+.exr-show-currency-convertor {
+  font-size: 14px;
+  padding: 8px 12px;
   text-decoration: none;
   color: var(--primary-color) !important;
 }
@@ -293,7 +295,7 @@
 
 @media (min-width: 1024px) {
   .exr-table-container {
-    max-width: 672px;
+    max-width: 544px;
     width: 100%;
   }
 
@@ -332,7 +334,6 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 101;
   background-color: #f7f7f7;
   /* Background color for visibility */
   color: #999999;
