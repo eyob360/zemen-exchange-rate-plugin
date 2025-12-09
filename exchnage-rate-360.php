@@ -1069,9 +1069,9 @@ function exr_360_fetch_exchange_rates() {
                     } else {
                         // Process average rates
                         foreach ($avg_xml->ROW as $avg_row) {
-                            $avg_currency_code = sanitize_text_field((string) $avg_row->CCY1);
-                            $avg_buying_rate = floatval($avg_row->AVG_BUY_RATE);
-                            $avg_selling_rate = floatval($avg_row->AVG_SALE_RATE);
+                            $avg_currency_code = sanitize_text_field((string) $avg_row->WEI_CCY1);
+                            $avg_buying_rate = floatval($avg_row->WEI_BUY_RATE);
+                            $avg_selling_rate = floatval($avg_row->WEI_SALE_RATE);
 
                             if (empty($avg_currency_code) || $avg_buying_rate <= 0 || $avg_selling_rate <= 0) {
                                 $avg_error_count++;
