@@ -35,7 +35,7 @@ function exr_display_exchange_rate_table()
     $avg_date = date("Y-m-d", strtotime($base_date . " -1 day"));
     $avg_rates = $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT * FROM $table_name WHERE DATE(post_date) = %s AND (avg_buying_rate IS NOT NULL OR avg_selling_rate IS NOT NULL) ORDER BY post_date DESC",
+            "SELECT * FROM $table_name WHERE DATE(post_date) = %s ORDER BY post_date DESC",
             $avg_date
         )
     );
@@ -233,10 +233,10 @@ function exr_display_exchange_rate_table()
                                         </div>
                                     </div>
                                     <div class="exr-column">' .
-                    ($avg_rate->avg_buying_rate ? esc_html(number_format($avg_rate->avg_buying_rate, 4)) : '--') .
+                    ($avg_rate->avg_buying_rate !== null ? esc_html(number_format($avg_rate->avg_buying_rate, 4)) : 'No Trade') .
                     '</div>
                                     <div class="exr-column">' .
-                    ($avg_rate->avg_selling_rate ? esc_html(number_format($avg_rate->avg_selling_rate, 4)) : '--') .
+                    ($avg_rate->avg_selling_rate !== null ? esc_html(number_format($avg_rate->avg_selling_rate, 4)) : 'No Trade') .
                     '</div>
                                 </div>';
             }

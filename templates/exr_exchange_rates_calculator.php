@@ -8,7 +8,7 @@ $table_name = $wpdb->prefix . "exr360_daily_info";
 $todays_date = current_time("Y-m-d");
 $todays_exchange_rates = $wpdb->get_results(
     $wpdb->prepare(
-        "SELECT * FROM $table_name WHERE DATE(post_date) = %s",
+        "SELECT * FROM $table_name WHERE DATE(post_date) = %s AND buying_rate IS NOT NULL AND selling_rate IS NOT NULL",
         $todays_date
     )
 );
@@ -208,8 +208,9 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
    jQuery(document).ready(function($) {
     const ajaxUrl = '<?php echo admin_url("admin-ajax.php"); ?>';
     const currenciesJsonUrl = '<?php echo plugin_dir_url(__FILE__) . "currencies-with-symbols.json"; ?>';
+    const todayDate = '<?php echo esc_js(current_time("Y-m-d")); ?>';
     let currencies = {};
-    let exchangeRates = {}; // Cache for exchange rates
+    let exchangeRates = []; // Cache for exchange rates
 
     // Function to show the loading spinner
     function showLoadingSpinner() {
@@ -226,6 +227,36 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
         return number.toLocaleString('en-US', {
             maximumFractionDigits: 4
         });
+    }
+
+    function formatDisplayDate(dateString) {
+        if (!dateString) return '';
+        const normalized = dateString.replace(/-/g, '/');
+        const parsed = new Date(normalized);
+        if (Number.isNaN(parsed.getTime())) return '';
+        return parsed.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    }
+
+    // Display helper for live values; null/zero maps to placeholder.
+    function displayLiveValue(value) {
+        const numeric = Number(value);
+        if (value === null || value === undefined || value === '' || Number.isNaN(numeric) || numeric === 0) {
+            return '--';
+        }
+        return formatNumber(numeric);
+    }
+
+    // Display helper for average values; null maps to "No Trade"
+    function displayAvgValue(value) {
+        const numeric = Number(value);
+        if (value === null || value === undefined || value === '' || Number.isNaN(numeric) || numeric === 0) {
+            return 'No Trade';
+        }
+        return formatNumber(numeric);
     }
 
     // Load currency metadata (e.g., symbols, flags) once on page load
@@ -258,15 +289,14 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                 const result = JSON.parse(response);
 
                 // Normalize dates from the response
-                const selectedDate = result.date || date;
+                const selectedDateValue = result.date || date || todayDate;
                 const avgDate = result.avg_date || '';
 
+                const selectedDateFormatted = formatDisplayDate(selectedDateValue) || formatDisplayDate(todayDate);
+                const avgDateFormatted = formatDisplayDate(avgDate) || 'Previous Day';
+                const isSelectedToday = selectedDateValue === todayDate;
+
                 // Update the header with the selected date
-                const selectedDateFormatted = new Date(selectedDate).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                });
                 $('#selected-date').text(selectedDateFormatted);
 
                 if (result.status === 'success') {
@@ -276,10 +306,22 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     const enrichedDayRates = enrichRates(dayRatesRaw);
                     const enrichedAvgRates = enrichRates(avgRatesRaw);
 
-                    exchangeRates = enrichedDayRates; // Cache the live rates for calculations
+                    const hasLiveRates = rate =>
+                        rate &&
+                        rate.buying_rate !== null &&
+                        rate.selling_rate !== null &&
+                        rate.buying_rate !== '' &&
+                        rate.selling_rate !== '' &&
+                        !isNaN(Number(rate.buying_rate)) &&
+                        !isNaN(Number(rate.selling_rate)) &&
+                        Number(rate.buying_rate) > 0 &&
+                        Number(rate.selling_rate) > 0;
+
+                    const liveDayRates = enrichedDayRates.filter(hasLiveRates);
+                    exchangeRates = liveDayRates; // Cache only live rates for calculations
 
                     const todayHeader = `
-                        <div class="exr-section-heading">Today's Rates (${selectedDateFormatted})</div>
+                        <div class="exr-section-heading">${isSelectedToday ? `Today's Rates (${selectedDateFormatted})` : `Rates for ${selectedDateFormatted}`}</div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
                             <div class="exr-column">Buying</div>
@@ -287,7 +329,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                         </div>
                     `;
 
-                    const todayRows = enrichedDayRates.map(rate => `
+                    const todayRows = liveDayRates.map(rate => `
                         <div class="exr-row">
                             <div class="exr-column">
                                 <div class="exr-currency-flag-code-name-container">
@@ -304,17 +346,16 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                                 </div>
                             </div>
                             <div class="exr-column" style="color:#000; font-size:20px;">
-                                ${formatNumber(Number(rate.buying_rate))}
+                                ${displayLiveValue(rate.buying_rate)}
                             </div>
                             <div class="exr-column" style="color:#000;font-size:20px;">
-                                ${formatNumber(Number(rate.selling_rate))}
+                                ${displayLiveValue(rate.selling_rate)}
                             </div>
                         </div>
                     `).join('') || '<p style="color: gray; text-align: center;">No live rates for this date.</p>';
 
-                    const avgDateFormatted = avgDate ? new Date(avgDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Previous Day';
                     const avgHeader = `
-                        <div class="exr-section-heading">Yesterday's Average Rates (${avgDateFormatted})</div>
+                        <div class="exr-section-heading">${isSelectedToday ? `Yesterday's Average Rates (${avgDateFormatted})` : `Previous Day Average Rates (${avgDateFormatted})`}</div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
                             <div class="exr-column">Avg Buying</div>
@@ -339,19 +380,19 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                                 </div>
                             </div>
                             <div class="exr-column" style="color:#000; font-size:20px;">
-                                ${rate.avg_buying_rate ? formatNumber(Number(rate.avg_buying_rate)) : '--'}
+                                ${displayAvgValue(rate.avg_buying_rate)}
                             </div>
                             <div class="exr-column" style="color:#000;font-size:20px;">
-                                ${rate.avg_selling_rate ? formatNumber(Number(rate.avg_selling_rate)) : '--'}
+                                ${displayAvgValue(rate.avg_selling_rate)}
                             </div>
                         </div>
-                    `).join('') || '<p style="color: gray; text-align: center; font-size: 16px; padding-top: 12px;">No average rates available for yesterday.</p>';
+                    `).join('') || '<p style="color: gray; text-align: center; font-size: 16px; padding-top: 12px;">No average rates available for the previous day.</p>';
 
                     $('#exr-rates-wrapper').html(`
                         <div class="exr-rates-shell">
                             <div class="exr-tab-controls">
-                                <button type="button" class="exr-tab-btn active" data-target="today">Today's Rates</button>
-                                <button type="button" class="exr-tab-btn" data-target="avg">Yesterday's Averages</button>
+                                <button type="button" class="exr-tab-btn active" data-target="today">${isSelectedToday ? "Today's Rates" : "Selected Date Rates"}</button>
+                                <button type="button" class="exr-tab-btn" data-target="avg">${isSelectedToday ? "Yesterday's Averages" : "Previous Day Averages"}</button>
                             </div>
                             <div class="exr-tab-panels">
                                 <div class="exr-tab-panel" data-panel="today" style="display:block;">
@@ -371,7 +412,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     `);
 
                     // Update the "Select Currency" dropdown using today's rates
-                    const dropdownOptions = enrichedDayRates.map(rate => `
+                    const dropdownOptions = liveDayRates.map(rate => `
                         <option value="${rate.currency_code}">${rate.currency_code} (${rate.symbol})</option>
                     `).join('') || '<option value="">No currencies available</option>';
                     $('#currency').html(dropdownOptions);
@@ -408,7 +449,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
     function calculateExchangeRate() {
         const currency = $('#currency').val();
         const amount = parseFloat($('#amount').val());
-        $('#amount-label').text(`Amount in ${currency}`);
+        $('#amount-label').text(`Amount in ${currency || ''}`);
 
         if (!currency || isNaN(amount) || amount <= 0) {
             $('#exr-cash-buying').text('Buying: --');
@@ -470,6 +511,6 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
     });
 
     // Initial load with today's rates
-    fetchExchangeRates('<?php echo esc_js(current_time("Y-m-d")); ?>');
+    fetchExchangeRates(todayDate);
 });
 </script>

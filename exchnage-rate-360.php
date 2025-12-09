@@ -140,8 +140,8 @@ function exr_360_rotate_logs($new_logs) {
        $sql_command1 = "CREATE TABLE $table_name1 (
             exchange_id INT AUTO_INCREMENT PRIMARY KEY,
             currency_code VARCHAR(10) NOT NULL,
-            buying_rate DECIMAL(10, 4) NOT NULL,
-            selling_rate DECIMAL(10, 4) NOT NULL,
+            buying_rate DECIMAL(10, 4) NULL,
+            selling_rate DECIMAL(10, 4) NULL,
             avg_buying_rate DECIMAL(10, 4) NULL,
             avg_selling_rate DECIMAL(10, 4) NULL,
             post_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -178,8 +178,33 @@ function exr_360_rotate_logs($new_logs) {
                "post_content" => "[exr_exchange_rates]", // Shortcode to display the exchange rate calculator
                "page_template" => "templates/exr_exchange_rates_calculator.php", // Template file
            ]);
+        }
+   }
+
+   /**
+    * Ensure live rate columns accept NULL so we don't coerce missing values to zero.
+    */
+   function exr_360_maybe_allow_null_live_rates() {
+       global $wpdb;
+       $table_name = $wpdb->prefix . "exr360_daily_info";
+
+       // Bail early if the table hasn't been created yet.
+       $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name));
+       if ($table_exists !== $table_name) {
+           return;
+       }
+
+       $buying_col = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'buying_rate'");
+       if ($buying_col && strtoupper($buying_col->Null) === 'NO') {
+           $wpdb->query("ALTER TABLE $table_name MODIFY buying_rate DECIMAL(10,4) NULL");
+       }
+
+       $selling_col = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'selling_rate'");
+       if ($selling_col && strtoupper($selling_col->Null) === 'NO') {
+           $wpdb->query("ALTER TABLE $table_name MODIFY selling_rate DECIMAL(10,4) NULL");
        }
    }
+   add_action('plugins_loaded', 'exr_360_maybe_allow_null_live_rates');
 
    // DB table deletion on plugin deactivation
    register_uninstall_hook(__FILE__, "exr_delete_table");
@@ -492,6 +517,9 @@ function exr_360_manage_page() {
                 data: { action: 'get_all_exchange_rates_by_date' }, // New AJAX action
                 success: function(response) {
                     var exchangeRatesByDate = JSON.parse(response);
+                    var displayAvgCell = function(value) {
+                        return (value === null || value === undefined || value === '') ? 'No Trade' : value;
+                    };
                     var treeHtml = '';
                     exchangeRatesByDate.forEach(function(dateGroup) {
                         treeHtml += '<div class="dateNode" data-date="' + dateGroup.date + '">';
@@ -506,8 +534,8 @@ function exr_360_manage_page() {
                             treeHtml += '<td>' + rate.currency_code + '</td>';
                             treeHtml += '<td>' + rate.buying_rate + '</td>';
                             treeHtml += '<td>' + rate.selling_rate + '</td>';
-                            treeHtml += '<td>' + (rate.avg_buying_rate || '--') + '</td>';
-                            treeHtml += '<td>' + (rate.avg_selling_rate || '--') + '</td>';
+                            treeHtml += '<td>' + displayAvgCell(rate.avg_buying_rate) + '</td>';
+                            treeHtml += '<td>' + displayAvgCell(rate.avg_selling_rate) + '</td>';
                             treeHtml += '<td>';
                             treeHtml += '<button class="editExchangeRateButton" data-id="' + rate.exchange_id + '">Edit</button>';
                             treeHtml += '<button class="deleteExchangeRateButton" data-id="' + rate.exchange_id + '">Delete</button>';
@@ -805,7 +833,7 @@ function get_exchange_rates()
     // Today's rates (live)
     $rates = $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT * FROM $table_name WHERE DATE(post_date) = %s",
+            "SELECT * FROM $table_name WHERE DATE(post_date) = %s AND buying_rate IS NOT NULL AND selling_rate IS NOT NULL",
             $date
         )
     );
@@ -814,7 +842,7 @@ function get_exchange_rates()
     $avg_date = date('Y-m-d', strtotime("$date -1 day"));
     $avg_rates = $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT * FROM $table_name WHERE DATE(post_date) = %s AND (avg_buying_rate IS NOT NULL OR avg_selling_rate IS NOT NULL)",
+            "SELECT * FROM $table_name WHERE DATE(post_date) = %s",
             $avg_date
         )
     );
@@ -1070,10 +1098,26 @@ function exr_360_fetch_exchange_rates() {
                         // Process average rates
                         foreach ($avg_xml->ROW as $avg_row) {
                             $avg_currency_code = sanitize_text_field((string) $avg_row->WEI_CCY1);
-                            $avg_buying_rate = floatval($avg_row->WEI_BUY_RATE);
-                            $avg_selling_rate = floatval($avg_row->WEI_SALE_RATE);
+                            $avg_buying_raw = trim((string) $avg_row->WEI_BUY_RATE);
+                            $avg_selling_raw = trim((string) $avg_row->WEI_SALE_RATE);
 
-                            if (empty($avg_currency_code) || $avg_buying_rate <= 0 || $avg_selling_rate <= 0) {
+                            $is_buy_no_trade = strcasecmp($avg_buying_raw, 'NO TRADE') === 0;
+                            $is_sell_no_trade = strcasecmp($avg_selling_raw, 'NO TRADE') === 0;
+
+                            // Treat "NO TRADE" (any casing) as an intentional null so it can be shown in the UI
+                            $avg_buying_rate = $is_buy_no_trade
+                                ? null
+                                : (is_numeric($avg_buying_raw) ? floatval($avg_buying_raw) : null);
+                            $avg_selling_rate = $is_sell_no_trade
+                                ? null
+                                : (is_numeric($avg_selling_raw) ? floatval($avg_selling_raw) : null);
+
+                            $has_invalid_numeric = ($avg_buying_rate !== null && $avg_buying_rate <= 0) ||
+                                ($avg_selling_rate !== null && $avg_selling_rate <= 0);
+                            $missing_required_values = (!$is_buy_no_trade && $avg_buying_rate === null) ||
+                                (!$is_sell_no_trade && $avg_selling_rate === null);
+
+                            if (empty($avg_currency_code) || $has_invalid_numeric || $missing_required_values) {
                                 $avg_error_count++;
                                 continue;
                             }
@@ -1089,13 +1133,21 @@ function exr_360_fetch_exchange_rates() {
 
                             if ($existing_avg_row) {
                                 // Update average rates if they've changed
-                                if ($existing_avg_row->avg_buying_rate != $avg_buying_rate || $existing_avg_row->avg_selling_rate != $avg_selling_rate) {
+                                $update_data = [
+                                    'avg_buying_rate'  => $avg_buying_rate,
+                                    'avg_selling_rate' => $avg_selling_rate
+                                ];
+
+                                // Clean up legacy placeholder zeros for live rates when no data was available.
+                                if ((float) $existing_avg_row->buying_rate === 0.0 && (float) $existing_avg_row->selling_rate === 0.0) {
+                                    $update_data['buying_rate'] = null;
+                                    $update_data['selling_rate'] = null;
+                                }
+
+                                if ($existing_avg_row->avg_buying_rate != $avg_buying_rate || $existing_avg_row->avg_selling_rate != $avg_selling_rate || array_key_exists('buying_rate', $update_data)) {
                                     $avg_updated = $wpdb->update(
                                         $table_name,
-                                        [
-                                            'avg_buying_rate'  => $avg_buying_rate,
-                                            'avg_selling_rate' => $avg_selling_rate
-                                        ],
+                                        $update_data,
                                         [ 'exchange_id' => $existing_avg_row->exchange_id ]
                                     );
 
@@ -1112,8 +1164,8 @@ function exr_360_fetch_exchange_rates() {
                                     $table_name,
                                     [
                                         'currency_code' => $avg_currency_code,
-                                        'buying_rate'   => 0,
-                                        'selling_rate'  => 0,
+                                        'buying_rate'   => null,
+                                        'selling_rate'  => null,
                                         'avg_buying_rate'  => $avg_buying_rate,
                                         'avg_selling_rate' => $avg_selling_rate,
                                         'post_date'     => $avg_day_time

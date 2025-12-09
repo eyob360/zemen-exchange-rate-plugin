@@ -10,7 +10,6 @@
   padding: 0;
   margin: 0;
   box-sizing: border-box;
-  z-index: 100;
 }
 
 /* toggle-btn */
@@ -63,6 +62,7 @@
   bottom: 85px;
   left: 30px;
   position: fixed;
+  z-index: 998;
   --exr-date-height: 48px;
   --exr-head-height: 56px;
   -webkit-overflow-scrolling: touch;
@@ -297,10 +297,12 @@
   .exr-table-container {
     max-width: 544px;
     width: 100%;
+    max-height: min(75vh, calc(100vh - 140px));
   }
 
   .exr-card-container {
     max-width: 100%;
+    max-height: calc(min(75vh, calc(100vh - 140px)) - var(--exr-date-height) - var(--exr-head-height));
   }
 
   .exr-head-container,
@@ -337,6 +339,7 @@
   background-color: #f7f7f7;
   /* Background color for visibility */
   color: #999999;
+  z-index: 2;
 }
 
 /* scroll */
