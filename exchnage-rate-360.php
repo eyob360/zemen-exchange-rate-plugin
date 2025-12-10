@@ -19,6 +19,11 @@ function exr_360_get_default_avg_xml_url() {
     return ""; // Empty by default, user must configure
 }
 
+// Default XML URL for cash exchange rates
+function exr_360_get_default_cash_xml_url() {
+    return ""; // Empty by default, user must configure
+}
+
 // Log rotation function to prevent log accumulation
 function exr_360_rotate_logs($new_logs) {
     $max_logs = get_option("exr_360_max_logs", 50); // Configurable max log entries
@@ -142,6 +147,8 @@ function exr_360_rotate_logs($new_logs) {
             currency_code VARCHAR(10) NOT NULL,
             buying_rate DECIMAL(10, 4) NULL,
             selling_rate DECIMAL(10, 4) NULL,
+            cash_buying_rate DECIMAL(10, 4) NULL,
+            cash_selling_rate DECIMAL(10, 4) NULL,
             avg_buying_rate DECIMAL(10, 4) NULL,
             avg_selling_rate DECIMAL(10, 4) NULL,
             post_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -160,6 +167,17 @@ function exr_360_rotate_logs($new_logs) {
        $column_exists_avg_sell = $wpdb->get_results("SHOW COLUMNS FROM $table_name1 LIKE 'avg_selling_rate'");
        if (empty($column_exists_avg_sell)) {
            $wpdb->query("ALTER TABLE $table_name1 ADD COLUMN avg_selling_rate DECIMAL(10, 4) NULL AFTER avg_buying_rate");
+       }
+
+       // Migration: Add cash rate columns if they don't exist
+       $column_exists_cash_buy = $wpdb->get_results("SHOW COLUMNS FROM $table_name1 LIKE 'cash_buying_rate'");
+       if (empty($column_exists_cash_buy)) {
+           $wpdb->query("ALTER TABLE $table_name1 ADD COLUMN cash_buying_rate DECIMAL(10, 4) NULL AFTER selling_rate");
+       }
+
+       $column_exists_cash_sell = $wpdb->get_results("SHOW COLUMNS FROM $table_name1 LIKE 'cash_selling_rate'");
+       if (empty($column_exists_cash_sell)) {
+           $wpdb->query("ALTER TABLE $table_name1 ADD COLUMN cash_selling_rate DECIMAL(10, 4) NULL AFTER cash_buying_rate");
        }
 
        // Check if the 'exchange-rates' page exists, if not, create it
@@ -205,6 +223,30 @@ function exr_360_rotate_logs($new_logs) {
        }
    }
    add_action('plugins_loaded', 'exr_360_maybe_allow_null_live_rates');
+
+   /**
+    * Ensure cash rate columns exist for legacy installs.
+    */
+   function exr_360_maybe_add_cash_columns() {
+       global $wpdb;
+       $table_name = $wpdb->prefix . "exr360_daily_info";
+
+       $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name));
+       if ($table_exists !== $table_name) {
+           return;
+       }
+
+       $cash_buy_col = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'cash_buying_rate'");
+       if (!$cash_buy_col) {
+           $wpdb->query("ALTER TABLE $table_name ADD COLUMN cash_buying_rate DECIMAL(10,4) NULL AFTER selling_rate");
+       }
+
+       $cash_sell_col = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'cash_selling_rate'");
+       if (!$cash_sell_col) {
+           $wpdb->query("ALTER TABLE $table_name ADD COLUMN cash_selling_rate DECIMAL(10,4) NULL AFTER cash_buying_rate");
+       }
+   }
+   add_action('plugins_loaded', 'exr_360_maybe_add_cash_columns');
 
    // DB table deletion on plugin deactivation
    register_uninstall_hook(__FILE__, "exr_delete_table");
@@ -295,6 +337,14 @@ function exr_360_manage_page() {
                     <tr>
                         <th scope="row"><label for="selling_rate">Selling Rate</label></th>
                         <td><input type="number" step="0.0001" name="selling_rate" required /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="cash_buying_rate">Cash Buying Rate</label></th>
+                        <td><input type="number" step="0.0001" name="cash_buying_rate" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="cash_selling_rate">Cash Selling Rate</label></th>
+                        <td><input type="number" step="0.0001" name="cash_selling_rate" /></td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="avg_buying_rate">Average Buying Rate</label></th>
@@ -474,6 +524,8 @@ function exr_360_manage_page() {
                     $('#exchangeRateForm input[name="post_date"]').val((data.post_date || '').split(' ')[0]);
                     $('#exchangeRateForm input[name="buying_rate"]').val(data.buying_rate);
                     $('#exchangeRateForm input[name="selling_rate"]').val(data.selling_rate);
+                    $('#exchangeRateForm input[name="cash_buying_rate"]').val(data.cash_buying_rate || '');
+                    $('#exchangeRateForm input[name="cash_selling_rate"]').val(data.cash_selling_rate || '');
                     $('#exchangeRateForm input[name="avg_buying_rate"]').val(data.avg_buying_rate || '');
                     $('#exchangeRateForm input[name="avg_selling_rate"]').val(data.avg_selling_rate || '');
                     $('#modalTitle').text('Edit Exchange Rate');
@@ -517,7 +569,7 @@ function exr_360_manage_page() {
                 data: { action: 'get_all_exchange_rates_by_date' }, // New AJAX action
                 success: function(response) {
                     var exchangeRatesByDate = JSON.parse(response);
-                    var displayAvgCell = function(value) {
+                    var displayOptionalCell = function(value) {
                         return (value === null || value === undefined || value === '') ? 'No Trade' : value;
                     };
                     var treeHtml = '';
@@ -527,15 +579,17 @@ function exr_360_manage_page() {
                         treeHtml += '<span class="expandButton">+</span>';
                         treeHtml += '</div>';
                         treeHtml += '<div class="exchangeRates" id="rates_' + dateGroup.date + '" style="display: none;">';
-                        treeHtml += '<table class="exchangeRateTable"><thead><tr><th>Currency Code</th><th>Buying Rate</th><th>Selling Rate</th><th>Avg Buying Rate</th><th>Avg Selling Rate</th><th>Actions</th></tr></thead><tbody>';
+                        treeHtml += '<table class="exchangeRateTable"><thead><tr><th>Currency Code</th><th>Buying Rate</th><th>Selling Rate</th><th>Cash Buying Rate</th><th>Cash Selling Rate</th><th>Avg Buying Rate</th><th>Avg Selling Rate</th><th>Actions</th></tr></thead><tbody>';
 
                         dateGroup.rates.forEach(function(rate) {
                             treeHtml += '<tr>';
                             treeHtml += '<td>' + rate.currency_code + '</td>';
                             treeHtml += '<td>' + rate.buying_rate + '</td>';
                             treeHtml += '<td>' + rate.selling_rate + '</td>';
-                            treeHtml += '<td>' + displayAvgCell(rate.avg_buying_rate) + '</td>';
-                            treeHtml += '<td>' + displayAvgCell(rate.avg_selling_rate) + '</td>';
+                            treeHtml += '<td>' + displayOptionalCell(rate.cash_buying_rate) + '</td>';
+                            treeHtml += '<td>' + displayOptionalCell(rate.cash_selling_rate) + '</td>';
+                            treeHtml += '<td>' + displayOptionalCell(rate.avg_buying_rate) + '</td>';
+                            treeHtml += '<td>' + displayOptionalCell(rate.avg_selling_rate) + '</td>';
                             treeHtml += '<td>';
                             treeHtml += '<button class="editExchangeRateButton" data-id="' + rate.exchange_id + '">Edit</button>';
                             treeHtml += '<button class="deleteExchangeRateButton" data-id="' + rate.exchange_id + '">Delete</button>';
@@ -593,6 +647,8 @@ function save_exchange_rate() {
     $post_date = sanitize_text_field($formData['post_date']);
     $buying_rate = floatval($formData['buying_rate']);
     $selling_rate = floatval($formData['selling_rate']);
+    $cash_buying_rate = isset($formData['cash_buying_rate']) && $formData['cash_buying_rate'] !== '' ? floatval($formData['cash_buying_rate']) : null;
+    $cash_selling_rate = isset($formData['cash_selling_rate']) && $formData['cash_selling_rate'] !== '' ? floatval($formData['cash_selling_rate']) : null;
     $avg_buying_rate = isset($formData['avg_buying_rate']) && $formData['avg_buying_rate'] !== '' ? floatval($formData['avg_buying_rate']) : null;
     $avg_selling_rate = isset($formData['avg_selling_rate']) && $formData['avg_selling_rate'] !== '' ? floatval($formData['avg_selling_rate']) : null;
     // Guard against invalid/empty dates; fallback to current time in site TZ
@@ -606,6 +662,12 @@ function save_exchange_rate() {
             'buying_rate' => $buying_rate,
             'selling_rate' => $selling_rate
         ];
+        if ($cash_buying_rate !== null) {
+            $update_data['cash_buying_rate'] = $cash_buying_rate;
+        }
+        if ($cash_selling_rate !== null) {
+            $update_data['cash_selling_rate'] = $cash_selling_rate;
+        }
         if ($avg_buying_rate !== null) {
             $update_data['avg_buying_rate'] = $avg_buying_rate;
         }
@@ -624,6 +686,12 @@ function save_exchange_rate() {
             'buying_rate' => $buying_rate,
             'selling_rate' => $selling_rate
         ];
+        if ($cash_buying_rate !== null) {
+            $insert_data['cash_buying_rate'] = $cash_buying_rate;
+        }
+        if ($cash_selling_rate !== null) {
+            $insert_data['cash_selling_rate'] = $cash_selling_rate;
+        }
         if ($avg_buying_rate !== null) {
             $insert_data['avg_buying_rate'] = $avg_buying_rate;
         }
@@ -666,7 +734,7 @@ function get_all_exchange_rates_by_date()
     // Get the exchange rates grouped by date
     $table_name = $wpdb->prefix . "exr360_daily_info";
     $rates = $wpdb->get_results("
-        SELECT DATE(post_date) as date, currency_code, buying_rate, selling_rate, avg_buying_rate, avg_selling_rate, exchange_id
+        SELECT DATE(post_date) as date, currency_code, buying_rate, selling_rate, cash_buying_rate, cash_selling_rate, avg_buying_rate, avg_selling_rate, exchange_id
         FROM $table_name
         ORDER BY post_date DESC
     ");
@@ -838,6 +906,14 @@ function get_exchange_rates()
         )
     );
 
+    // Cash rates
+    $cash_rates = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT * FROM $table_name WHERE DATE(post_date) = %s AND cash_buying_rate IS NOT NULL AND cash_selling_rate IS NOT NULL",
+            $date
+        )
+    );
+
     // Yesterday's averages
     $avg_date = date('Y-m-d', strtotime("$date -1 day"));
     $avg_rates = $wpdb->get_results(
@@ -847,13 +923,14 @@ function get_exchange_rates()
         )
     );
 
-    if ($rates || $avg_rates) {
+    if ($rates || $avg_rates || $cash_rates) {
         echo json_encode([
             "status" => "success",
             "date" => $date,
             "avg_date" => $avg_date,
             "rates" => [
                 "day" => $rates ?: [],
+                "cash" => $cash_rates ?: [],
                 "average" => $avg_rates ?: [],
             ],
         ]);
@@ -1057,7 +1134,107 @@ function exr_360_fetch_exchange_rates() {
     }
 
     // Log summary only
-    $logs[] = date('Y-m-d H:i:s'). " - Fetch completed: {$update_count} updated, {$insert_count} inserted, {$error_count} errors";
+    $logs[] = date('Y-m-d H:i:s'). " - Transaction fetch completed: {$update_count} updated, {$insert_count} inserted, {$error_count} errors";
+
+    // Fetch cash exchange rates if URL is configured
+    $cash_xml_url = get_option("exr_360_cash_xml_url", exr_360_get_default_cash_xml_url());
+    if (!empty($cash_xml_url)) {
+        $cash_logs = [];
+        $cash_update_count = 0;
+        $cash_insert_count = 0;
+        $cash_error_count = 0;
+
+        $cash_response = wp_remote_get($cash_xml_url, [
+            'timeout' => 30,
+            'headers' => [
+                'User-Agent' => 'WordPress Exchange Rate 360 Plugin'
+            ]
+        ]);
+
+        if (is_wp_error($cash_response)) {
+            $cash_logs[] = date('Y-m-d H:i:s'). " - Error fetching cash rates XML: " . $cash_response->get_error_message();
+        } else {
+            $cash_http_code = wp_remote_retrieve_response_code($cash_response);
+            if ($cash_http_code !== 200) {
+                $cash_logs[] = date('Y-m-d H:i:s'). " - HTTP Error $cash_http_code when fetching cash rates XML";
+            } else {
+                $cash_xml_content = wp_remote_retrieve_body($cash_response);
+                if (empty($cash_xml_content)) {
+                    $cash_logs[] = date('Y-m-d H:i:s'). " - Empty response from cash rates XML URL";
+                } else {
+                    $cash_xml = simplexml_load_string($cash_xml_content);
+                    if (!$cash_xml) {
+                        $cash_logs[] = date('Y-m-d H:i:s'). " - Failed to parse cash rates XML content";
+                    } else {
+                        foreach ($cash_xml->ROW as $cash_row) {
+                            $cash_currency_code = sanitize_text_field((string) $cash_row->CCY1);
+                            $cash_buying_rate = floatval($cash_row->BUY_RATE);
+                            $cash_selling_rate = floatval($cash_row->SALE_RATE);
+
+                            if (empty($cash_currency_code) || $cash_buying_rate <= 0 || $cash_selling_rate <= 0) {
+                                $cash_error_count++;
+                                continue;
+                            }
+
+                            $existing_cash_row = $wpdb->get_row(
+                                $wpdb->prepare(
+                                    "SELECT exchange_id, cash_buying_rate, cash_selling_rate FROM $table_name WHERE currency_code = %s AND DATE(post_date) = %s",
+                                    $cash_currency_code,
+                                    $current_day
+                                )
+                            );
+
+                            if ($existing_cash_row) {
+                                if ($existing_cash_row->cash_buying_rate != $cash_buying_rate || $existing_cash_row->cash_selling_rate != $cash_selling_rate) {
+                                    $cash_updated = $wpdb->update(
+                                        $table_name,
+                                        [
+                                            'cash_buying_rate'  => $cash_buying_rate,
+                                            'cash_selling_rate' => $cash_selling_rate,
+                                            'post_date'         => $current_time
+                                        ],
+                                        [ 'exchange_id' => $existing_cash_row->exchange_id ]
+                                    );
+
+                                    if ($cash_updated !== false) {
+                                        $cash_update_count++;
+                                    } else {
+                                        $cash_error_count++;
+                                        $cash_logs[] = date('Y-m-d H:i:s'). " - Failed to update cash rates for $cash_currency_code. Error: " . $wpdb->last_error;
+                                    }
+                                }
+                            } else {
+                                $cash_inserted = $wpdb->insert(
+                                    $table_name,
+                                    [
+                                        'currency_code' => $cash_currency_code,
+                                        'buying_rate'   => null,
+                                        'selling_rate'  => null,
+                                        'cash_buying_rate'  => $cash_buying_rate,
+                                        'cash_selling_rate' => $cash_selling_rate,
+                                        'post_date'     => $current_time
+                                    ]
+                                );
+
+                                if ($cash_inserted) {
+                                    $cash_insert_count++;
+                                } else {
+                                    $cash_error_count++;
+                                    $cash_logs[] = date('Y-m-d H:i:s'). " - Failed to insert cash rates for $cash_currency_code. Error: " . $wpdb->last_error;
+                                }
+                            }
+                        }
+
+                        if ($cash_update_count > 0 || $cash_insert_count > 0 || $cash_error_count > 0) {
+                            $cash_logs[] = date('Y-m-d H:i:s'). " - Cash rates fetch completed: {$cash_update_count} updated, {$cash_insert_count} inserted, {$cash_error_count} errors";
+                        }
+                    }
+                }
+            }
+        }
+
+        $logs = array_merge($logs, $cash_logs);
+    }
 
     // Fetch average exchange rates if URL is configured
     $avg_xml_url = get_option("exr_360_avg_xml_url", exr_360_get_default_avg_xml_url());
@@ -1125,7 +1302,7 @@ function exr_360_fetch_exchange_rates() {
                             // Find existing row for this currency and date
                             $existing_avg_row = $wpdb->get_row(
                                 $wpdb->prepare(
-                                    "SELECT exchange_id, avg_buying_rate, avg_selling_rate FROM $table_name WHERE currency_code = %s AND DATE(post_date) = %s",
+                                    "SELECT exchange_id, buying_rate, selling_rate, avg_buying_rate, avg_selling_rate FROM $table_name WHERE currency_code = %s AND DATE(post_date) = %s",
                                     $avg_currency_code,
                                     $avg_day
                                 )
@@ -1299,6 +1476,7 @@ add_action("admin_init", "exr_360_register_settings");
 function exr_360_register_settings() {
     register_setting("exr_360_settings_group", "exr_360_xml_url", "exr_360_sanitize_xml_url");
     register_setting("exr_360_settings_group", "exr_360_avg_xml_url", "exr_360_sanitize_xml_url");
+    register_setting("exr_360_settings_group", "exr_360_cash_xml_url", "exr_360_sanitize_xml_url");
     register_setting("exr_360_settings_group", "exr_360_cron_frequency", "exr_360_update_cron_schedule");
     register_setting("exr_360_settings_group", "exr_360_max_logs", "exr_360_sanitize_max_logs");
 
@@ -1321,6 +1499,14 @@ function exr_360_register_settings() {
         "exr_360_avg_xml_url",
         "Average Exchange Rate XML URL",
         "exr_360_avg_xml_url_callback",
+        "exr-settings",
+        "exr_360_settings_section"
+    );
+
+    add_settings_field(
+        "exr_360_cash_xml_url",
+        "Cash Exchange Rate XML URL",
+        "exr_360_cash_xml_url_callback",
         "exr-settings",
         "exr_360_settings_section"
     );
@@ -1381,6 +1567,13 @@ function exr_360_avg_xml_url_callback() {
     $avg_xml_url = get_option("exr_360_avg_xml_url", exr_360_get_default_avg_xml_url());
     echo '<input type="url" name="exr_360_avg_xml_url" value="' . esc_attr($avg_xml_url) . '" class="regular-text" style="width: 500px;" />';
     echo '<p class="description">The URL where the average exchange rate XML data is located. Leave empty to disable average rate fetching.</p>';
+}
+
+// Callback function for the Cash XML URL field
+function exr_360_cash_xml_url_callback() {
+    $cash_xml_url = get_option("exr_360_cash_xml_url", exr_360_get_default_cash_xml_url());
+    echo '<input type="url" name="exr_360_cash_xml_url" value="' . esc_attr($cash_xml_url) . '" class="regular-text" style="width: 500px;" />';
+    echo '<p class="description">The URL where the cash exchange rate XML data is located. Leave empty to disable cash rate fetching.</p>';
 }
 
 // Callback function for the cron frequency field

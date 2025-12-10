@@ -184,7 +184,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
         background: #fff !important;
         border-radius: 4px !important;
         cursor: pointer;
-        font-weight: 600;
+        font-weight: 500 !important;
         font-size: 14px !important;
     }
 
