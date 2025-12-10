@@ -113,7 +113,7 @@ function exr_display_exchange_rate_table()
                             <button type="button" class="exr-tab-btn active" data-target="today">Today\'s Rates</button>
                             <button type="button" class="exr-tab-btn" data-target="avg">Yesterday\'s Averages</button>
                         </div>
-                        <a class="exr-show-currency-convertor" href="<?php echo esc_url( home_url( '/exchange-rates/' ) ); ?>">Currency Converter</a>
+                        <a class="exr-show-currency-convertor" href="/exchange-rates/">Currency Converter</a>
                     </div>
                     <div class="exr-tab-panels">
                         <div class="exr-tab-panel" data-panel="today" style="display:block;">
