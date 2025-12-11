@@ -115,10 +115,10 @@ function exr_display_exchange_rate_table()
             color: #ed1c24 !important;
             border-radius: 4px !important;
             font-weight: 500 !important;
+            text-decoration: none !important;
         }
         .exr-show-currency-convertor:hover {
-            background: #faebeb !important;
-            border-color: #faebeb !important;
+            text-decoration: underline !important;
         }
         .exr-popup-heading {
             width: 100%;
@@ -285,7 +285,7 @@ function exr_display_exchange_rate_table()
                 </div>
             </div>
             <div class="exr-convertor-row">
-                <a class="exr-show-currency-convertor" href="/exchange-rates/">Currency Converter</a>
+                <a class="exr-show-currency-convertor" href="/exchange-rates/">Expand Full List of Exchange Rates</a>
             </div>
         </div>
     </section>

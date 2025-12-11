@@ -180,27 +180,6 @@
   overflow: hidden;
 }
 
-/* .exr-show-currency-convertor {
-  border: none;
-  padding: 2px 3px;
-  border-radius: 4px;
-  background-color: #ed1c233d;
-  cursor: pointer;
-  color: #000;
-  }
-  .exr-show-currency-convertor:hover {
-  background-color: #ed1c2354;
-  color: #000;
-  } */
-
-.exr-show-currency-convertor {
-  font-size: 14px;
-  padding: 8px 12px;
-  text-decoration: none;
-  color: var(--primary-color) !important;
-  font-weight: 500;
-}
-
 .exr-card-container {
   width: 100%;
   min-width: 0;
@@ -482,10 +461,6 @@
   width: 700px;
 }
 
-.exchange-rates-container h3 {
-  padding: 20px 40px;
-}
-
 /* scroll */
 /* Custom scrollbar styles */
 .exchange-rates-container::-webkit-scrollbar {
@@ -527,28 +502,34 @@
   align-items: center;
   border-radius: 8px;
   overflow: hidden;
-  padding: 0 3px;
+  width: 72px !important;
+  height: 32px !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  margin-top: 12px !important;
+  margin-bottom: 12px !important;
 }
 
 .exr-search-button:hover {
   background: #ed1c23ec;
+  cursor: pointer;
 }
 
 .exr-search-button .exr-icon img {
-  width: 28px;
-  height: 28px;
+  width: 16px !important;
+  height: 16px !important;
 }
 
 #exr-search-date {
   color: #fff;
   border: none;
-  padding: 0 6px;
-  font-size: 18px;
-  font-weight: 400;
-}
-
-#exr-search-date:hover {
-  background: #ed1c24;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  background: #ed1c24 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* buying-selling */
@@ -565,6 +546,7 @@
   color: #000;
   /* padding-top: 18px; */
   font-size: 18px;
+  margin: 0 !important;
 }
 
 /* input */
@@ -744,14 +726,5 @@ option:checked {
   .exr-toggle-close span:nth-child(2) {
     display: inline;
     /* Show text on larger screens */
-  }
-}
-
-@media (min-width: 1024px) {
-  #exr-search-date {
-
-    padding: 0px 0px;
-    font-size: 14px;
-
   }
 }

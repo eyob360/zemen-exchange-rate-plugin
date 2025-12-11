@@ -31,7 +31,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
             <!-- Date Input -->
             <div class="exr-form-group">
                 <label for="date">Select Date</label>
-                <div style="display: flex; gap: 10px;">
+                <div>
                     <input type="date" id="date" name="date" value="<?php echo esc_attr($todays_date); ?>" required>
                     <div class="exr-search-button" onclick="document.getElementById('exr-search-date').click();">
                         <span class="exr-icon">
@@ -84,7 +84,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                 <p>Loading...</p>
             </div>
         </div>
-        <h3>Exchange Rates for <span id="selected-date"><?php echo esc_html($formatted_date); ?></span></h3>
+        <h3 class="exr-page-heading">Foreign Exchange Rates Applicable on <span id="selected-date"><?php echo esc_html($formatted_date); ?></span></h3>
         <div id="exr-rates-wrapper">
             <div id="ex-loading-screen" style="display: none;">
                 <div>
@@ -169,6 +169,27 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
         font-size: 18px;
         color: #000;
         padding: 8px 12px;
+    }
+
+    .exr-page-heading {
+        padding: 12px !important;
+        padding-top: 24px !important;
+        margin: 0 !important;
+        font-size: 18px;
+        font-weight: 600;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .exr-tab-strip {
+        border-bottom: 1px solid #ED1D24;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+
+    .exr-tab-subtitle {
+        padding: 6px 0 12px;
+        font-size: 13px;
+        color: #555;
     }
 
     .exr-tab-controls {
@@ -300,6 +321,7 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                 $('#selected-date').text(selectedDateFormatted);
 
                 if (result.status === 'success') {
+                    const tabSubtitle = `<div class="exr-tab-subtitle" data-panel="avg" style="display:none;">Previous day: ${avgDateFormatted}</div>`;
                     const dayRatesRaw = (result.rates && Array.isArray(result.rates.day)) ? result.rates.day : (Array.isArray(result.rates) ? result.rates : []);
                     const cashRatesRaw = (result.rates && Array.isArray(result.rates.cash)) ? result.rates.cash : [];
                     const avgRatesRaw = (result.rates && Array.isArray(result.rates.average)) ? result.rates.average : [];
@@ -335,7 +357,6 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     exchangeRates = liveDayRates; // Cache only live rates for calculations
 
                     const todayHeader = `
-                        <div class="exr-section-heading">${isSelectedToday ? `Today's Rates (${selectedDateFormatted})` : `Rates for ${selectedDateFormatted}`}</div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
                             <div class="exr-column">Buying</div>
@@ -369,7 +390,6 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     `).join('') || '<p style="color: gray; text-align: center;">No live rates for this date.</p>';
 
                     const cashHeader = `
-                        <div class="exr-section-heading">Cash Rates (${selectedDateFormatted})</div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
                             <div class="exr-column">Cash Buying</div>
@@ -378,7 +398,6 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     `;
 
                     const avgHeader = `
-                        <div class="exr-section-heading">${isSelectedToday ? `Yesterday's Average Rates (${avgDateFormatted})` : `Previous Day Average Rates (${avgDateFormatted})`}</div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
                             <div class="exr-column">Avg Buying</div>
@@ -438,10 +457,13 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
 
                     $('#exr-rates-wrapper').html(`
                         <div class="exr-rates-shell">
-                            <div class="exr-tab-controls">
-                                <button type="button" class="exr-tab-btn active" data-target="today">Transaction Rates</button>
-                                <button type="button" class="exr-tab-btn" data-target="cash">Cash Rates</button>
-                                <button type="button" class="exr-tab-btn" data-target="avg">Weighted Average Rates</button>
+                            <div class="exr-tab-strip">
+                                <div class="exr-tab-controls">
+                                    <button type="button" class="exr-tab-btn active" data-target="today">Transaction Rates</button>
+                                    <button type="button" class="exr-tab-btn" data-target="cash">Cash Rates</button>
+                                    <button type="button" class="exr-tab-btn" data-target="avg">Weighted Average Rates</button>
+                                </div>
+                                ${tabSubtitle}
                             </div>
                             <div class="exr-tab-panels">
                                 <div class="exr-tab-panel" data-panel="today" style="display:block;">
@@ -498,6 +520,9 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
 
         shell.find('.exr-tab-panel').hide();
         shell.find(`.exr-tab-panel[data-panel="${target}"]`).show();
+
+        shell.find('.exr-tab-subtitle').hide();
+        shell.find(`.exr-tab-subtitle[data-panel="${target}"]`).show();
     });
 
     // Fetch and display specific exchange rate calculation
