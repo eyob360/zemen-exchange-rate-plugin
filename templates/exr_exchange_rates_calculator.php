@@ -392,16 +392,16 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     const cashHeader = `
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
-                            <div class="exr-column">Cash Buying</div>
-                            <div class="exr-column">Cash Selling</div>
+                            <div class="exr-column">Buying</div>
+                            <div class="exr-column">Selling</div>
                         </div>
                     `;
 
                     const avgHeader = `
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
-                            <div class="exr-column">Avg Buying</div>
-                            <div class="exr-column">Avg Selling</div>
+                            <div class="exr-column">Buying</div>
+                            <div class="exr-column">Selling</div>
                         </div>
                     `;
 

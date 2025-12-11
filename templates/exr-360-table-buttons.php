@@ -108,10 +108,8 @@ function exr_display_exchange_rate_table()
             flex-direction: row !important;
         }
         .exr-show-currency-convertor {
-            margin-left: auto;
             font-size: 14px !important;
             padding: 8px 12px !important;
-            margin-right: 12px !important;
             color: #ed1c24 !important;
             border-radius: 4px !important;
             font-weight: 500 !important;
@@ -200,8 +198,8 @@ function exr_display_exchange_rate_table()
                     <div class="exr-card-container">
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
-                            <div class="exr-column">Cash Buying</div>
-                            <div class="exr-column">Cash Selling</div>
+                            <div class="exr-column">Buying</div>
+                            <div class="exr-column">Selling</div>
                         </div>
                         <div class="exr-body-container">
                             <?php if (!empty($cash_rates)): ?>
@@ -242,8 +240,8 @@ function exr_display_exchange_rate_table()
                         <div class="exr-tab-subtitle">Previous day: <?php echo esc_html($formatted_avg_date); ?></div>
                         <div class="exr-head-container">
                             <div class="exr-column">Currency</div>
-                            <div class="exr-column">Avg Buying</div>
-                            <div class="exr-column">Avg Selling</div>
+                            <div class="exr-column">Buying</div>
+                            <div class="exr-column">Selling</div>
                         </div>
                         <div class="exr-body-container">
                             <?php if (!empty($avg_rates)): ?>
@@ -284,8 +282,11 @@ function exr_display_exchange_rate_table()
                     </div>
                 </div>
             </div>
-            <div class="exr-convertor-row">
-                <a class="exr-show-currency-convertor" href="/exchange-rates/">Expand Full List of Exchange Rates</a>
+            <div class="exr-convertor-row" style="width: 100%;">
+                <div style="width: 100%; display: flex; justify-content: space-between;">
+                    <a class="exr-show-currency-convertor" href="/exchange-rates/">Currency Converter</a>
+                    <a class="exr-show-currency-convertor" href="/exchange-rates/">Expand Full List of Exchange Rates</a>
+                </div>
             </div>
         </div>
     </section>
