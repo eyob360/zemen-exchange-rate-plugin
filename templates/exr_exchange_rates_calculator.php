@@ -301,9 +301,11 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
 
                 if (result.status === 'success') {
                     const dayRatesRaw = (result.rates && Array.isArray(result.rates.day)) ? result.rates.day : (Array.isArray(result.rates) ? result.rates : []);
+                    const cashRatesRaw = (result.rates && Array.isArray(result.rates.cash)) ? result.rates.cash : [];
                     const avgRatesRaw = (result.rates && Array.isArray(result.rates.average)) ? result.rates.average : [];
 
                     const enrichedDayRates = enrichRates(dayRatesRaw);
+                    const enrichedCashRates = enrichRates(cashRatesRaw);
                     const enrichedAvgRates = enrichRates(avgRatesRaw);
 
                     const hasLiveRates = rate =>
@@ -317,7 +319,19 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                         Number(rate.buying_rate) > 0 &&
                         Number(rate.selling_rate) > 0;
 
+                    const hasCashRates = rate =>
+                        rate &&
+                        rate.cash_buying_rate !== null &&
+                        rate.cash_selling_rate !== null &&
+                        rate.cash_buying_rate !== '' &&
+                        rate.cash_selling_rate !== '' &&
+                        !isNaN(Number(rate.cash_buying_rate)) &&
+                        !isNaN(Number(rate.cash_selling_rate)) &&
+                        Number(rate.cash_buying_rate) > 0 &&
+                        Number(rate.cash_selling_rate) > 0;
+
                     const liveDayRates = enrichedDayRates.filter(hasLiveRates);
+                    const cashRates = enrichedCashRates.filter(hasCashRates);
                     exchangeRates = liveDayRates; // Cache only live rates for calculations
 
                     const todayHeader = `
@@ -354,6 +368,15 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                         </div>
                     `).join('') || '<p style="color: gray; text-align: center;">No live rates for this date.</p>';
 
+                    const cashHeader = `
+                        <div class="exr-section-heading">Cash Rates (${selectedDateFormatted})</div>
+                        <div class="exr-head-container">
+                            <div class="exr-column">Currency</div>
+                            <div class="exr-column">Cash Buying</div>
+                            <div class="exr-column">Cash Selling</div>
+                        </div>
+                    `;
+
                     const avgHeader = `
                         <div class="exr-section-heading">${isSelectedToday ? `Yesterday's Average Rates (${avgDateFormatted})` : `Previous Day Average Rates (${avgDateFormatted})`}</div>
                         <div class="exr-head-container">
@@ -362,6 +385,31 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                             <div class="exr-column">Avg Selling</div>
                         </div>
                     `;
+
+                    const cashRows = cashRates.map(rate => `
+                        <div class="exr-row">
+                            <div class="exr-column">
+                                <div class="exr-currency-flag-code-name-container">
+                                    <div class="exr-currency-flag-code">
+                                        <div class="exr-currency-flag">
+                                            ${rate.flag_url ? `<img src="${rate.flag_url}" alt="${rate.currency_code} Flag">` : ''}
+                                        </div>
+                                        <p class="exr-currency-code-2">${rate.currency_code}</p>
+                                    </div>
+                                    <div class="exr-currency-icon-name-container">
+                                        <span class="exr-currency-icon" >${rate.symbol}</span>
+                                        <span class="exr-currency-name" >${rate.name}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="exr-column" style="color:#000; font-size:20px;">
+                                ${displayLiveValue(rate.cash_buying_rate)}
+                            </div>
+                            <div class="exr-column" style="color:#000;font-size:20px;">
+                                ${displayLiveValue(rate.cash_selling_rate)}
+                            </div>
+                        </div>
+                    `).join('') || '<p style="color: gray; text-align: center;">No cash rates for this date.</p>';
 
                     const avgRows = enrichedAvgRates.map(rate => `
                         <div class="exr-row">
@@ -391,14 +439,21 @@ $formatted_date = date("M d, Y", strtotime($todays_date));
                     $('#exr-rates-wrapper').html(`
                         <div class="exr-rates-shell">
                             <div class="exr-tab-controls">
-                                <button type="button" class="exr-tab-btn active" data-target="today">${isSelectedToday ? "Today's Rates" : "Selected Date Rates"}</button>
-                                <button type="button" class="exr-tab-btn" data-target="avg">${isSelectedToday ? "Yesterday's Averages" : "Previous Day Averages"}</button>
+                                <button type="button" class="exr-tab-btn active" data-target="today">Transaction Rates</button>
+                                <button type="button" class="exr-tab-btn" data-target="cash">Cash Rates</button>
+                                <button type="button" class="exr-tab-btn" data-target="avg">Weighted Average Rates</button>
                             </div>
                             <div class="exr-tab-panels">
                                 <div class="exr-tab-panel" data-panel="today" style="display:block;">
                                     <div class="exr-card-container">
                                         ${todayHeader}
                                         ${todayRows}
+                                    </div>
+                                </div>
+                                <div class="exr-tab-panel" data-panel="cash">
+                                    <div class="exr-card-container">
+                                        ${cashHeader}
+                                        ${cashRows}
                                     </div>
                                 </div>
                                 <div class="exr-tab-panel" data-panel="avg">
