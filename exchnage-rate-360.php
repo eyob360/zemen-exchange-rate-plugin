@@ -1023,6 +1023,7 @@ add_action('exr_360_fetch_exchange_rates', 'exr_360_fetch_exchange_rates');
 // Function to fetch exchange rates from XML URL and save to database
 function exr_360_fetch_exchange_rates() {
     $logs = [];
+    $main_fetch_failed = false; // track if the primary transaction XML fetch failed (transport/parse)
     $xml_url = get_option("exr_360_xml_url", exr_360_get_default_xml_url());
 
     // Fetch XML data from URL
@@ -1036,21 +1037,22 @@ function exr_360_fetch_exchange_rates() {
     if (is_wp_error($response)) {
         $logs[] = date('Y-m-d H:i:s'). " - Error fetching XML from URL: " . $response->get_error_message();
         set_transient('exr_fetch_exchange_rates_logs', $logs, 60 * 60 * 24);
-        return;
+        // don't abort here; allow cash/average fetches to still run
+        $main_fetch_failed = true;
     }
 
     $http_code = wp_remote_retrieve_response_code($response);
     if ($http_code !== 200) {
         $logs[] = date('Y-m-d H:i:s'). " - HTTP Error $http_code when fetching XML from URL";
         set_transient('exr_fetch_exchange_rates_logs', $logs, 60 * 60 * 24);
-        return;
+        $main_fetch_failed = true;
     }
 
     $xml_content = wp_remote_retrieve_body($response);
     if (empty($xml_content)) {
         $logs[] = date('Y-m-d H:i:s'). " - Empty response from XML URL";
         set_transient('exr_fetch_exchange_rates_logs', $logs, 60 * 60 * 24);
-        return;
+        $main_fetch_failed = true;
     }
 
     // Parse the XML content
@@ -1058,7 +1060,7 @@ function exr_360_fetch_exchange_rates() {
     if (!$xml) {
         $logs[] = date('Y-m-d H:i:s'). " - Failed to parse XML content from URL";
         set_transient('exr_fetch_exchange_rates_logs', $logs, 60 * 60 * 24);
-        return;
+        $main_fetch_failed = true;
     }
 
     global $wpdb;
@@ -1370,8 +1372,13 @@ function exr_360_fetch_exchange_rates() {
         $logs = array_merge($logs, $avg_logs);
     }
 
-    // Record last successful run if there were no transport/parse errors
-    update_option('exr_360_last_successful_fetch', current_time('mysql'));
+    // Record last successful run only if the main transaction fetch didn't have transport/parse errors
+    if (!$main_fetch_failed) {
+        update_option('exr_360_last_successful_fetch', current_time('mysql'));
+    } else {
+        // ensure we don't falsely report a successful fetch when the main fetch failed
+        // the logs/transients already contain error information
+    }
 
     // Store logs with rotation - keep only last 50 entries
     exr_360_rotate_logs($logs);
