@@ -65,6 +65,7 @@
   z-index: 998;
   --exr-date-height: 48px;
   --exr-head-height: 56px;
+  --exr-footer-height: 56px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -83,7 +84,7 @@
     overflow: auto;
     -webkit-overflow-scrolling: touch;
     position: relative;
-    max-height: calc((100vh - 160px) - var(--exr-date-height) - var(--exr-head-height));
+    max-height: calc((100vh - 160px) - var(--exr-date-height) - var(--exr-head-height) - var(--exr-footer-height));
   }
 
   .exr-head-container,
@@ -114,7 +115,7 @@
     max-height: calc(100vh - 170px);
   }
   .exr-card-container {
-    max-height: calc((100vh - 170px) - var(--exr-date-height) - var(--exr-head-height));
+    max-height: calc((100vh - 170px) - var(--exr-date-height) - var(--exr-head-height) - var(--exr-footer-height));
   }
 
   .exr-date-container {
@@ -155,6 +156,10 @@
     bottom: 60px;
   }
 
+  .exr-card-container {
+    max-height: calc(300px - var(--exr-date-height) - var(--exr-head-height) - var(--exr-footer-height));
+  }
+
   .exr-date-container {
     font-size: 16px;
   }
@@ -184,7 +189,7 @@
   width: 100%;
   min-width: 0;
   overflow: auto;
-  max-height: calc((100vh - 140px) - var(--exr-date-height) - var(--exr-head-height));
+  max-height: calc((100vh - 140px) - var(--exr-date-height) - var(--exr-head-height) - var(--exr-footer-height));
 }
 
 .exr-body-container {
@@ -282,7 +287,7 @@
 
   .exr-card-container {
     max-width: 100%;
-    max-height: calc(min(75vh, calc(100vh - 140px)) - var(--exr-date-height) - var(--exr-head-height));
+    max-height: calc(min(75vh, calc(100vh - 140px)) - var(--exr-date-height) - var(--exr-head-height) - var(--exr-footer-height));
   }
 
   .exr-head-container,
