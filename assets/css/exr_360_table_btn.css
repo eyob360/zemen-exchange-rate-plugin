@@ -27,7 +27,7 @@
   right: auto;
   transition: opacity 0.3s ease, transform 0.3s ease;
   position: fixed;
-  z-index: 999;
+  z-index: 1010;
 }
 
 .exr-toggle-table-btn:hover {
@@ -62,7 +62,7 @@
   bottom: 90px !important;
   left: 30px;
   position: fixed;
-  z-index: 998;
+  z-index: 1005;
   --exr-date-height: 48px;
   --exr-head-height: 56px;
   --exr-footer-height: 56px;
